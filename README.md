@@ -18,6 +18,49 @@ Check if the sub modules are installed, run the following from the terminal, in 
 If the modules have a leading hyphen, they are not checked out.  
 To fix this, run:  ```git submodule update --init --recursive```  
 
+### Install requirements ###
+```
+cd ~/ardupilot/modules/ChibiOS/tools/workflows
+pip3 install -r requirements.txt
+```
+
+### Install ARM Toolchain
+```
+sudo apt update
+sudo apt install gcc-arm-none-eabi
+sudo apt install binutils-arm-none-eabi
+```
+
+## Build steps: ##
+From the ardupilot directory:  
+1. Configure the bootloader ```./waf configure --board EchoUAS-BM --bootloader```  
+
+2. Build the bootloader: ``` ./waf bootloader ```  
+It might ask you to install *empy*. If so run: ```python3 -m pip install empy==3.3.4 ```  
+Then repeat step 2  
+There should be a bunch of new files in the ardupilot/build/EchoUAS-BM directory
+
+3. Configure the board ```./waf configure --board EchoUAS-BM```  
+If you get the following error:
+    ```
+    Error: Bootloader (./Tools/bootloaders/EchoUAS-BM_bl.bin) does not exist and AP_BOOTLOADER_FLASHING_ENABLED   
+    Please run: Tools/scripts/build_bootloaders.py EchoUAS-BM 
+    ```
+    if means you need to run the suggested .py script with python3 from the root directory  
+eg:  ```ardupilot> python3 Tools/scripts/build_bootloaders.py EchoUAS-BM```  
+
+4. Build using: ``` ./waf AP_Periph ```  
+If you get the error: 
+    ```
+    ModuleNotFoundError: No module named 'serial' 
+    ```  
+    it means you need to install a pyserial module ```pip3 install pyserial```  
+    then build again.
+
+5. Find the AP_Periph.bin file at [ardupilot/build/EchoUAS-BM/bin](build/EchoUAS-BM/bin)
+
+
+
  ***
 
 # ArduPilot Project
