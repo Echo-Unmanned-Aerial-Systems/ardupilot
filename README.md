@@ -1,6 +1,6 @@
 ## EchoUAS Directories ##
 - Battery Monitor folder: [libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/)
-- CANNode_L431 folder: [[libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/)]
+- CANNode_L431 folder: [[libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/)]
 
 
 # ArduPilot Project
