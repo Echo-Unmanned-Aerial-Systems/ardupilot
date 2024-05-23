@@ -1,7 +1,24 @@
-## EchoUAS Directories ##
+[comment]: # (to view this file in pretty format in VS Code, right click Open Preview)
+
+# EchoUAS Notes #
+
+### Directories ###
 - Battery Monitor folder: [libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/)
 - CANNode_L431 folder: [libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/)
+- Read the [Build Istructions](BUILD.md) 
 
+### WSL Extension ###
+Install WSL on Windows and then install the WSL Extension in VS Code before you clone anything.  
+Click the blue ```><``` button in the bottom left and Connect to WSL. This opens a new instance of VS Code in linux.  
+Now clone the EchoUAS fork of the ardupilot repo into the home directory of your linux OS. Be sure to use --recursive  
+eg. ``` git clone --recursive https://github.com/Echo-Unmanned-Aerial-Systems/ardupilot.git ```
+
+### Oops, I did not use --recursive when I cloned the ardupilot repo ###
+Check if the sub modules are installed, run the following from the terminal, in your ardupilot directory ```git submodule status```  
+If the modules have a leading hyphen, they are not checked out.  
+To fix this, run:  ```git submodule update --init --recursive```  
+
+ ***
 
 # ArduPilot Project
 
