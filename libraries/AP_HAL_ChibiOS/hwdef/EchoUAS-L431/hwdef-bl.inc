@@ -50,8 +50,8 @@ MAIN_STACK 0x800
 PROCESS_STACK 0x800
 
 # Add CS pins to ensure they are high in bootloader
-PA4 SPI1_CS CS
-PB12 SPI2_CS CS
+PA4 SPARE_CS CS
+# PB12 SPI2_CS CS
 
 # debugger support
 PA13 JTMS-SWDIO SWD
