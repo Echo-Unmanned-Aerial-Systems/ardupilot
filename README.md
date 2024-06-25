@@ -11,12 +11,18 @@
 Install WSL on Windows and then install the WSL Extension in VS Code before you clone anything.  
 Click the blue ```><``` button in the bottom left and Connect to WSL. This opens a new instance of VS Code in linux.  
 Now clone the EchoUAS fork of the ardupilot repo into the home directory of your linux OS. Be sure to use --recursive  
-eg. ``` git clone --recursive https://github.com/Echo-Unmanned-Aerial-Systems/ardupilot.git ```
+eg. ``` git clone --recursive https://github.com/Echo-Unmanned-Aerial-Systems/ardupilot.git ```  
+Commands should be run from the terminal which can be opened from the Top menu in VSCode: Terminal > New Terminal
 
 ### Oops, I did not use --recursive when I cloned the ardupilot repo ###
 Check if the sub modules are installed, run the following from the terminal, in your ardupilot directory ```git submodule status```  
 If the modules have a leading hyphen, they are not checked out.  
 To fix this, run:  ```git submodule update --init --recursive```  
+
+### Install PIP3 ### 
+PIP is a well used python package manager. You need it to install the rest of the dependancies.  
+Follow the instructions below, for Debian/Ubuntu flavored linux.   
+https://www.geeksforgeeks.org/how-to-install-pip-in-linux/
 
 ### Install requirements ###
 ```
@@ -32,15 +38,19 @@ sudo apt install binutils-arm-none-eabi
 ```
 
 ## Build steps: ##
-From the ardupilot directory:  
-1. Configure the bootloader ```./waf configure --board EchoUAS-BM --bootloader```  
 
-2. Build the bootloader: ``` ./waf bootloader ```  
+1. Open a new terminal: VSCode > Terminal > New Terminal
+2. Navigate to the ardupilot directory:  use ```cd ~/ardupilot```  
+    (note: tilda is a linux shortcut to the home folder)
+2. Configure the bootloader ```./waf configure --board EchoUAS-BM --bootloader```  
+    if it complains about pexpect install it with ```pip install pexpect```
+
+3. Build the bootloader: ``` ./waf bootloader ```  
 It might ask you to install *empy*. If so run: ```python3 -m pip install empy==3.3.4 ```  
 Then repeat step 2  
 There should be a bunch of new files in the ardupilot/build/EchoUAS-BM directory
 
-3. Configure the board ```./waf configure --board EchoUAS-BM```  
+4. Configure the board ```./waf configure --board EchoUAS-BM```  
 If you get the following error:
     ```
     Error: Bootloader (./Tools/bootloaders/EchoUAS-BM_bl.bin) does not exist and AP_BOOTLOADER_FLASHING_ENABLED   
@@ -49,15 +59,12 @@ If you get the following error:
     if means you need to run the suggested .py script with python3 from the root directory  
 eg:  ```ardupilot> python3 Tools/scripts/build_bootloaders.py EchoUAS-BM```  
 
-4. Build using: ``` ./waf AP_Periph ```  
-If you get the error: 
-    ```
-    ModuleNotFoundError: No module named 'serial' 
-    ```  
-    it means you need to install a pyserial module ```pip3 install pyserial```  
-    then build again.
+5. Build using: ``` ./waf AP_Periph ```  
+  If you get the error: ```ModuleNotFoundError: No module named 'serial'``` you need to install a pyserial module ```pip3 install pyserial```  
+  If you get an error regarding _pexpect_ , try ```pip install pexpect```  
+  then build again.
 
-5. Find the AP_Periph.bin file at [ardupilot/build/EchoUAS-BM/bin](build/EchoUAS-BM/bin)
+6. Find the AP_Periph.bin file at [ardupilot/build/EchoUAS-BM/bin](build/EchoUAS-BM/bin)
 
 
 
