@@ -19,7 +19,6 @@ on:
       - 'Tools/GIT_Test/**'
       - 'Tools/gittools/**'
       - 'Tools/Hello/**'
-      - 'Tools/LogAnalyzer/**'
       - 'Tools/mavproxy_modules/**'
       - 'Tools/Pozyx/**'
       - 'Tools/PrintVersion.py'
@@ -159,6 +158,7 @@ jobs:
             CubeOrange-PPP,
             SOHW,
             Pixhawk6X-PPPGW,
+            new-check,
         ]
         toolchain: [
             chibios,

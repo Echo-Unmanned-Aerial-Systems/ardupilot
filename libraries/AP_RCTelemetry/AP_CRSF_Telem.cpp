@@ -13,6 +13,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "AP_RCTelemetry_config.h"
+
+#if HAL_CRSF_TELEM_ENABLED
+
 #include "AP_CRSF_Telem.h"
 #include <AP_VideoTX/AP_VideoTX.h>
 #include <AP_HAL/utility/sparse-endian.h>
@@ -30,7 +34,7 @@
 #include <stdio.h>
 #include <AP_HAL/AP_HAL.h>
 
-#if HAL_CRSF_TELEM_ENABLED
+#include <AP_VideoTX/AP_VideoTX.h>
 
 #include <AP_Vehicle/AP_Vehicle_Type.h>
 
@@ -65,6 +69,13 @@ bool AP_CRSF_Telem::init(void)
         && !AP::serialmanager().have_serial(AP_SerialManager::SerialProtocol_CRSF, 0)) {
         return false;
     }
+
+#if AP_VIDEOTX_ENABLED
+    // Someone explicitly configure CRSF control for VTX
+    if (AP::serialmanager().have_serial(AP_SerialManager::SerialProtocol_CRSF, 0)) {
+        AP::vtx().set_provider_enabled(AP_VideoTX::VTXType::CRSF);
+    }
+#endif
 
     return AP_RCTelemetry::init();
 }
@@ -569,6 +580,8 @@ void AP_CRSF_Telem::process_vtx_frame(VTXFrame* vtx) {
         return;
     }
 
+    apvtx.set_provider_enabled(AP_VideoTX::VTXType::CRSF);
+
     apvtx.set_band(vtx->band);
     apvtx.set_channel(vtx->channel);
     if (vtx->is_in_user_frequency_mode) {
@@ -614,6 +627,8 @@ void AP_CRSF_Telem::process_vtx_telem_frame(VTXTelemetryFrame* vtx)
     if (!apvtx.get_enabled()) {
         return;
     }
+
+    apvtx.set_provider_enabled(AP_VideoTX::VTXType::CRSF);
 
     apvtx.set_frequency_mhz(vtx->frequency);
 
@@ -746,11 +761,6 @@ void AP_CRSF_Telem::process_param_read_frame(ParameterSettingsReadFrame* read_fr
     _pending_request.frame_type = AP_RCProtocol_CRSF::CRSF_FRAMETYPE_PARAMETER_READ;
 }
 
-// process any changed settings and schedule for transmission
-void AP_CRSF_Telem::update()
-{
-}
-
 void AP_CRSF_Telem::process_pending_requests()
 {
     // handle general parameter requests
@@ -781,7 +791,8 @@ void AP_CRSF_Telem::update_vtx_params()
 {
     AP_VideoTX& vtx = AP::vtx();
 
-    if (!vtx.get_enabled()) {
+    // This function does ugly things with the vtx parameters which will upset other providers
+    if (!vtx.get_enabled() || !vtx.is_provider_enabled(AP_VideoTX::VTXType::CRSF)) {
         return;
     }
 
@@ -1265,7 +1276,7 @@ void AP_CRSF_Telem::calc_parameter() {
 
     _pending_request.frame_type = 0;
     _telem_pending = true;
-#endif
+#endif  // OSD_PARAM_ENABLED
 }
 
 #if HAL_CRSF_TELEM_TEXT_SELECTION_ENABLED
@@ -1415,7 +1426,7 @@ void AP_CRSF_Telem::calc_text_selection(AP_OSD_ParamSetting* param, uint8_t chun
     _pending_request.frame_type = 0;
     _telem_pending = true;
 }
-#endif
+#endif  // HAL_CRSF_TELEM_TEXT_SELECTION_ENABLED
 
 // write parameter information back into AP - assumes we already know the encoding for floats
 void AP_CRSF_Telem::process_param_write_frame(ParameterSettingsWriteFrame* write_frame)
@@ -1485,7 +1496,7 @@ void AP_CRSF_Telem::process_param_write_frame(ParameterSettingsWriteFrame* write
     default:
         break;
     }
-#endif
+#endif  // OSD_PARAM_ENABLED
 }
 
 // get status text data
@@ -1629,7 +1640,7 @@ AP_CRSF_Telem *AP_CRSF_Telem::get_singleton(void) {
     if (!singleton && !hal.util->get_soft_armed()) {
         // if telem data is requested when we are disarmed and don't
         // yet have a AP_CRSF_Telem object then try to allocate one
-        new AP_CRSF_Telem();
+        NEW_NOTHROW AP_CRSF_Telem();
         // initialize the passthrough scheduler
         if (singleton) {
             singleton->init();
@@ -1644,4 +1655,4 @@ namespace AP {
     }
 };
 
-#endif
+#endif  // HAL_CRSF_TELEM_ENABLED

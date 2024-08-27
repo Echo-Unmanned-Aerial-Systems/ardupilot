@@ -4,6 +4,7 @@ from collections import OrderedDict
 import re
 import sys, os
 import fnmatch
+import platform
 
 import waflib
 from waflib import Utils
@@ -11,6 +12,10 @@ from waflib.Configure import conf
 import json
 _board_classes = {}
 _board = None
+
+# modify our search path:
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../libraries/AP_HAL_ChibiOS/hwdef/scripts'))
+import chibios_hwdef
 
 class BoardMeta(type):
     def __init__(cls, name, bases, dct):
@@ -38,8 +43,14 @@ class Board:
     def configure(self, cfg):
         cfg.env.TOOLCHAIN = cfg.options.toolchain or self.toolchain
         cfg.env.ROMFS_FILES = []
-        cfg.load('toolchain')
+        if hasattr(self,'configure_toolchain'):
+            self.configure_toolchain(cfg)
+        else:
+            cfg.load('toolchain')
         cfg.load('cxx_checks')
+
+        # don't check elf symbols by default
+        cfg.env.CHECK_SYMBOLS = False
 
         env = waflib.ConfigSet.ConfigSet()
         def srcpath(path):
@@ -179,7 +190,7 @@ class Board:
         cfg.env.prepend_value('INCLUDES', [
             cfg.srcnode.find_dir('libraries/AP_Common/missing').abspath()
         ])
-        if os.path.exists(os.path.join(env.SRCROOT, '.vscode/c_cpp_properties.json')):
+        if os.path.exists(os.path.join(env.SRCROOT, '.vscode/c_cpp_properties.json')) and 'AP_NO_COMPILE_COMMANDS' not in os.environ:
             # change c_cpp_properties.json configure the VSCode Intellisense env
             c_cpp_properties = json.load(open(os.path.join(env.SRCROOT, '.vscode/c_cpp_properties.json')))
             for config in c_cpp_properties['configurations']:
@@ -190,6 +201,8 @@ class Board:
             cfg.msg("Configured VSCode Intellisense:", 'no', color='YELLOW')
 
     def cc_version_gte(self, cfg, want_major, want_minor):
+        if cfg.env.TOOLCHAIN == "custom":
+            return True
         (major, minor, patchlevel) = cfg.env.CC_VERSION
         return (int(major) > want_major or
                 (int(major) == want_major and int(minor) >= want_minor))
@@ -198,6 +211,8 @@ class Board:
         # Use a dictionary instead of the conventional list for definitions to
         # make easy to override them. Convert back to list before consumption.
         env.DEFINES = {}
+
+        env.with_can = self.with_can
 
         # potentially set extra defines from an environment variable:
         if cfg.options.define is not None:
@@ -272,7 +287,6 @@ class Board:
                     '-Werror=implicit-fallthrough',
                 ]
             env.CXXFLAGS += [
-                '-fcheck-new',
                 '-fsingle-precision-constant',
                 '-Wno-psabi',
             ]
@@ -603,21 +617,13 @@ def get_ap_periph_boards():
             continue
         hwdef = os.path.join(dirname, d, 'hwdef.dat')
         if os.path.exists(hwdef):
-            with open(hwdef, "r") as f:
-                content = f.read()
-                if 'AP_PERIPH' in content:
+            ch = chibios_hwdef.ChibiOSHWDef(hwdef=[hwdef], quiet=True)
+            try:
+                if ch.is_periph_fw_unprocessed():
                     list_ap.append(d)
-                    continue
-                # process any include lines:
-                m = re.match(r"include\s+([^\s]*)", content)
-                if m is None:
-                    continue
-                include_path = os.path.join(os.path.dirname(hwdef), m.group(1))
-                with open(include_path, "r") as g:
-                    content = g.read()
-                    if 'AP_PERIPH' in content:
-                        list_ap.append(d)
-                        continue
+            except chibios_hwdef.ChibiOSHWDefIncludeNotFoundException as e:
+                print(f"{e.includer} includes {e.hwdef} which does not exist")
+                sys.exit(1)
 
     list_ap = list(set(list_ap))
     return list_ap
@@ -757,6 +763,13 @@ class sitl(Board):
             'SITL',
         ]
 
+        # wrap malloc to ensure memory is zeroed
+        if cfg.env.DEST_OS == 'cygwin':
+            # on cygwin we need to wrap _malloc_r instead
+            env.LINKFLAGS += ['-Wl,--wrap,_malloc_r']
+        elif platform.system() != 'Darwin':
+            env.LINKFLAGS += ['-Wl,--wrap,malloc']
+        
         if cfg.options.enable_sfml:
             if not cfg.check_SFML(env):
                 cfg.fatal("Failed to find SFML libraries")
@@ -928,6 +941,7 @@ class sitl_periph_universal(sitl_periph):
             AP_BATTERY_ESC_ENABLED = 1,
             HAL_PWM_COUNT = 32,
             HAL_WITH_ESC_TELEM = 1,
+            AP_EXTENDED_ESC_TELEM_ENABLED = 1,
             AP_TERRAIN_AVAILABLE = 1,
         )
 
@@ -942,6 +956,19 @@ class sitl_periph_gps(sitl_periph):
             APJ_BOARD_ID = 101,
 
             HAL_PERIPH_ENABLE_GPS = 1,
+        )
+
+class sitl_periph_battmon(sitl_periph):
+    def configure_env(self, cfg, env):
+        cfg.env.AP_PERIPH = 1
+        super(sitl_periph_battmon, self).configure_env(cfg, env)
+        env.DEFINES.update(
+            HAL_BUILD_AP_PERIPH = 1,
+            PERIPH_FW = 1,
+            CAN_APP_NODE_NAME = '"org.ardupilot.ap_periph_battmon"',
+            APJ_BOARD_ID = 101,
+
+            HAL_PERIPH_ENABLE_BATTERY = 1,
         )
 
 class esp32(Board):
@@ -968,7 +995,6 @@ class esp32(Board):
         
         # this makes sure we get the correct subtype
         env.DEFINES.update(
-            ENABLE_HEAP = 0,
             CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_ESP32_%s' %  tt.upper() ,
             HAL_HAVE_HARDWARE_DOUBLE = '1',
         )
@@ -1006,11 +1032,12 @@ class esp32(Board):
                          '-fno-inline-functions',
                          '-mlongcalls',
                          '-fsingle-precision-constant', # force const vals to be float , not double. so 100.0 means 100.0f 
-                         '-fno-threadsafe-statics',
-                         '-DCYGWIN_BUILD']
+                         '-fno-threadsafe-statics']
         env.CXXFLAGS.remove('-Werror=undef')
         env.CXXFLAGS.remove('-Werror=shadow')
 
+        # wrap malloc to ensure memory is zeroed
+        env.LINKFLAGS += ['-Wl,--wrap,malloc']
 
         env.INCLUDES += [
                 cfg.srcnode.find_dir('libraries/AP_HAL_ESP32/boards').abspath(),
@@ -1264,6 +1291,16 @@ class chibios(Board):
             cfg.msg("Checking for intelhex module:", 'disabled', color='YELLOW')
             env.HAVE_INTEL_HEX = False
 
+        if cfg.options.enable_new_checking:
+            env.CHECK_SYMBOLS = True
+        else:
+            # disable new checking on ChibiOS by default to save flash
+            # we enable it in a CI test to catch incorrect usage
+            env.CXXFLAGS += [
+                "-DNEW_NOTHROW=new",
+                "-fcheck-new", # rely on -fcheck-new ensuring nullptr checks
+                ]
+
     def build(self, bld):
         super(chibios, self).build(bld)
         bld.ap_version_append_str('CHIBIOS_GIT_VERSION', bld.git_submodule_head_hash('ChibiOS', short=True))
@@ -1319,6 +1356,9 @@ class linux(Board):
         env.AP_LIBRARIES += [
             'AP_HAL_Linux',
         ]
+
+        # wrap malloc to ensure memory is zeroed
+        env.LINKFLAGS += ['-Wl,--wrap,malloc']
 
         if cfg.options.force_32bit:
             env.DEFINES.update(
@@ -1618,3 +1658,99 @@ class SITL_x86_64_linux_gnu(SITL_static):
 
 class SITL_arm_linux_gnueabihf(SITL_static):
     toolchain = 'arm-linux-gnueabihf'
+
+class QURT(Board):
+    '''support for QURT based boards'''
+    toolchain = 'custom'
+
+    def __init__(self):
+        self.with_can = False
+
+    def configure_toolchain(self, cfg):
+        cfg.env.CXX_NAME = 'gcc'
+        cfg.env.HEXAGON_SDK_DIR = "/opt/hexagon-sdk/4.1.0.4-lite"
+        cfg.env.CC_VERSION = ('4','1','0')
+        cfg.env.TOOLCHAIN_DIR = cfg.env.HEXAGON_SDK_DIR + "/tools/HEXAGON_Tools/8.4.05/Tools"
+        cfg.env.COMPILER_CC = cfg.env.TOOLCHAIN_DIR + "/bin/hexagon-clang"
+        cfg.env.COMPILER_CXX = cfg.env.TOOLCHAIN_DIR + "/bin/hexagon-clang++"
+        cfg.env.LINK_CXX = cfg.env.HEXAGON_SDK_DIR + "/tools/HEXAGON_Tools/8.4.05/Tools/bin/hexagon-link"
+        cfg.env.CXX = ["ccache", cfg.env.COMPILER_CXX]
+        cfg.env.CC = ["ccache", cfg.env.COMPILER_CC]
+        cfg.env.CXX_TGT_F = ['-c', '-o']
+        cfg.env.CC_TGT_F = ['-c', '-o']
+        cfg.env.CCLNK_SRC_F = []
+        cfg.env.CXXLNK_SRC_F = []
+        cfg.env.CXXLNK_TGT_F = ['-o']
+        cfg.env.CCLNK_TGT_F = ['-o']
+        cfg.env.CPPPATH_ST = '-I%s'
+        cfg.env.DEFINES_ST = '-D%s'
+        cfg.env.AR = cfg.env.HEXAGON_SDK_DIR + "/tools/HEXAGON_Tools/8.4.05/Tools/bin/hexagon-ar"
+        cfg.env.ARFLAGS = 'rcs'
+        cfg.env.cxxstlib_PATTERN = 'lib%s.a'
+        cfg.env.cstlib_PATTERN = 'lib%s.a'
+        cfg.env.LIBPATH_ST = '-L%s'
+        cfg.env.LIB_ST = '-l%s'
+        cfg.env.SHLIB_MARKER = ''
+        cfg.env.STLIBPATH_ST = '-L%s'
+        cfg.env.STLIB_MARKER = ''
+        cfg.env.STLIB_ST = '-l%s'
+        cfg.env.LDFLAGS = [
+            '-lgcc',
+            cfg.env.TOOLCHAIN_DIR + '/target/hexagon/lib/v66/G0/pic/finiS.o'
+        ]
+
+    def configure_env(self, cfg, env):
+        super(QURT, self).configure_env(cfg, env)
+
+        env.BOARD_CLASS = "QURT"
+        env.HEXAGON_APP = "libardupilot.so"
+        env.INCLUDES += [cfg.env.HEXAGON_SDK_DIR + "/rtos/qurt/computev66/include/qurt"]
+        env.INCLUDES += [cfg.env.HEXAGON_SDK_DIR + "/rtos/qurt/computev66/include/posix"]
+
+        CFLAGS = "-MD -mv66 -fPIC -mcpu=hexagonv66 -G0 -fdata-sections -ffunction-sections -fomit-frame-pointer -fmerge-all-constants -fno-signed-zeros -fno-trapping-math -freciprocal-math -fno-math-errno -fno-strict-aliasing -fvisibility=hidden -fno-rtti -fmath-errno"
+        env.CXXFLAGS += CFLAGS.split()
+        env.CFLAGS += CFLAGS.split()
+
+        env.DEFINES.update(
+            CONFIG_HAL_BOARD = 'HAL_BOARD_QURT',
+            CONFIG_HAL_BOARD_SUBTYPE = 'HAL_BOARD_SUBTYPE_NONE',
+            AP_SIM_ENABLED = 0,
+        )
+
+        env.LINKFLAGS = [
+            "-march=hexagon",
+            "-mcpu=hexagonv66",
+            "-shared",
+            "-call_shared",
+            "-G0",
+            cfg.env.TOOLCHAIN_DIR + "/target/hexagon/lib/v66/G0/pic/initS.o",
+            f"-L{cfg.env.TOOLCHAIN_DIR}/target/hexagon/lib/v66/G0/pic",
+            "-Bsymbolic",
+            cfg.env.TOOLCHAIN_DIR + "/target/hexagon/lib/v66/G0/pic/libgcc.a",
+            "--wrap=malloc",
+            "--wrap=calloc",
+            "--wrap=free",
+            "--wrap=realloc",
+            "--wrap=printf",
+            "--wrap=strdup",
+            "--wrap=__stack_chk_fail",
+            "-lc"
+        ]
+
+        if not cfg.env.DEBUG:
+            env.CXXFLAGS += [
+                '-O3',
+            ]
+
+        env.AP_LIBRARIES += [
+            'AP_HAL_QURT',
+        ]
+
+    def build(self, bld):
+        super(QURT, self).build(bld)
+        bld.load('qurt')
+
+    def get_name(self):
+        # get name of class
+        return self.__class__.__name__
+    

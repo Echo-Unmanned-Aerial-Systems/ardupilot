@@ -168,6 +168,7 @@ for reviewing patches on their specific area.
   - ***Vehicle***: Rover
 - [Willian Galvani](https://github.com/williangalvani):
   - ***Vehicle***: Sub
+  - ***Board***: Navigator
 - [Michael du Breuil](https://github.com/WickedShell):
   - ***Subsystem***: Batteries
   - ***Subsystem***: GPS

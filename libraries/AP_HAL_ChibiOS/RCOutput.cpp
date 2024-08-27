@@ -808,11 +808,9 @@ void RCOutput::push_local(void)
 #endif // HAL_DSHOT_ENABLED
                 if (group.current_mode == MODE_PWM_ONESHOT ||
                     group.current_mode == MODE_PWM_ONESHOT125 ||
-                    group.current_mode == MODE_NEOPIXEL ||
-                    group.current_mode == MODE_NEOPIXELRGB ||
-                    group.current_mode == MODE_PROFILED ||
                     is_dshot_protocol(group.current_mode)) {
                     // only control widest pulse for oneshot and dshot
+                    // do not control for neopixel since updates to these are not pushed
                     if (period_us > widest_pulse) {
                         widest_pulse = period_us;
                     }
@@ -945,7 +943,7 @@ bool RCOutput::setup_group_DMA(pwm_group &group, uint32_t bitrate, uint32_t bit_
     }
 #else
     if (!group.dma_handle) {
-        group.dma_handle = new Shared_DMA(group.dma_up_stream_id, SHARED_DMA_NONE,
+        group.dma_handle = NEW_NOTHROW Shared_DMA(group.dma_up_stream_id, SHARED_DMA_NONE,
                                           FUNCTOR_BIND_MEMBER(&RCOutput::dma_allocate, void, Shared_DMA *),
                                           FUNCTOR_BIND_MEMBER(&RCOutput::dma_deallocate, void, Shared_DMA *));
         if (!group.dma_handle) {
@@ -1133,6 +1131,7 @@ void RCOutput::set_group_mode(pwm_group &group)
         if (is_bidir_dshot_enabled(group)) {
             group.dshot_pulse_send_time_us = pulse_send_time_us;
             // to all intents and purposes the pulse time of send and receive are the same
+            // for dshot600 this is roughly 26us + 30us + 26us = 82us
             group.dshot_pulse_time_us = pulse_send_time_us + pulse_send_time_us + 30;
         }
 #endif
@@ -1263,9 +1262,13 @@ bool RCOutput::get_output_mode_banner(char banner_msg[], uint8_t banner_msg_len)
     if (iomcu_enabled) {
         uint8_t iomcu_mask;
         const output_mode iomcu_mode = iomcu.get_output_mode(iomcu_mask);
+        const uint8_t gpio_mask = iomcu.get_GPIO_mask();
         for (uint8_t i = 0; i < chan_offset; i++ ) {
-            if (iomcu_mask & 1U<<i) {
+            const uint8_t chan_bit = 1U<<i;
+            if (iomcu_mask & chan_bit) {
                 ch_mode[i] = iomcu_mode;
+            } else if (gpio_mask & chan_bit) {
+                ch_mode[i] = MODE_PWM_NONE;
             } else {
                 ch_mode[i] = MODE_PWM_NORMAL;
             }
@@ -1531,16 +1534,15 @@ void RCOutput::dma_deallocate(Shared_DMA *ctx)
     for (auto &group : pwm_group_list) {
         if (group.dma_handle == ctx && group.dma != nullptr) {
             chSysLock();
+            dmaStreamFreeI(group.dma);
 #if defined(STM32F1)
             // leaving the peripheral running on IOMCU plays havoc with the UART that is
             // also sharing this channel, we only turn it off rather than resetting so
             // that we don't have to worry about line modes etc
             if (group.pwm_started && group.dma_handle->is_shared()) {
-                group.pwm_drv->tim->CR1   = 0;
-                group.pwm_drv->tim->DIER  = 0;
+                bdshot_disable_pwm_f1(group);
             }
 #endif
-            dmaStreamFreeI(group.dma);
             group.dma = nullptr;
             chSysUnlock();
         }
@@ -2566,7 +2568,7 @@ bool RCOutput::set_serial_led_rgb_data(const uint16_t chan, int8_t led, uint8_t 
         for (uint8_t j = 0; j < 4; j++) {
             delete[] grp->serial_led_data[j];
             grp->serial_led_data[j] = nullptr;
-            grp->serial_led_data[j] = new SerialLed[grp->serial_nleds];
+            grp->serial_led_data[j] = NEW_NOTHROW SerialLed[grp->serial_nleds];
             if (grp->serial_led_data[j] == nullptr) {
                 // if allocation failed clear all memory
                  for (uint8_t k = 0; k < 4; k++) {

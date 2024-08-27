@@ -44,6 +44,44 @@ function uint32_t_ud:tofloat() end
 ---@return integer
 function uint32_t_ud:toint() end
 
+---@class (exact) uint64_t_ud
+---@operator add(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator sub(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator mul(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator div(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator mod(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator band(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator bor(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator shl(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+---@operator shr(uint64_t_ud|uint32_t_ud|integer|number): uint64_t_ud
+local uint64_t_ud = {}
+
+-- create uint64_t_ud with optional value
+-- Note that lua ints are 32 bits and lua floats will loose resolution at large values
+---@param value? uint64_t_ud|uint32_t_ud|integer|number
+---@return uint64_t_ud
+function uint64_t(value) end
+
+-- create uint64_t_ud from a low and high half
+-- value = (high << 32) | low
+---@param high uint32_t_ud|integer|number
+---@param low uint32_t_ud|integer|number
+---@return uint64_t_ud
+function uint64_t(high, low) end
+
+-- Convert to number, will loose resolution at large values
+---@return number
+function uint64_t_ud:tofloat() end
+
+-- Convert to integer, nil if too large to be represented by native int32
+---@return integer|nil
+function uint64_t_ud:toint() end
+
+-- Split into high and low half's, returning each as a uint32_t_ud
+---@return uint32_t_ud -- high (value >> 32)
+---@return uint32_t_ud -- low (value & 0xFFFFFFFF)
+function uint64_t_ud:split() end
+
 -- system time in milliseconds
 ---@return uint32_t_ud -- milliseconds
 function millis() end
@@ -69,14 +107,21 @@ function print(text) end
 -- data flash logging to SD card
 logger = {}
 
--- write value to data flash log with given types and names, optional units and multipliers, timestamp will be automatically added
+-- write value to data flash log with given types and names with units and multipliers, timestamp will be automatically added
 ---@param name string -- up to 4 characters
 ---@param labels string -- comma separated value labels, up to 58 characters
 ---@param format string -- type format string, see https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/README.md
----@param units? string -- optional units string
----@param multipliers? string -- optional multipliers string
----@param data1 integer|number|uint32_t_ud|string -- data to be logged, type to match format string
-function logger:write(name, labels, format, units, multipliers, data1, ...) end
+---@param units string -- units string
+---@param multipliers string -- multipliers string
+---@param ... integer|number|uint32_t_ud|string -- data to be logged, type to match format string
+function logger:write(name, labels, format, units, multipliers, ...) end
+
+-- write value to data flash log with given types and names, timestamp will be automatically added
+---@param name string -- up to 4 characters
+---@param labels string -- comma separated value labels, up to 58 characters
+---@param format string -- type format string, see https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/README.md
+---@param ... integer|number|uint32_t_ud|string -- data to be logged, type to match format string
+function logger:write(name, labels, format, ...) end
 
 -- log a files content to onboard log
 ---@param filename string -- file name
@@ -90,7 +135,7 @@ i2c = {}
 ---@param address integer -- device address 0 to 128
 ---@param clock? uint32_t_ud|integer|number -- optional bus clock, default 400000
 ---@param smbus? boolean -- optional sumbus flag, default false
----@return AP_HAL__I2CDevice_ud|nil
+---@return AP_HAL__I2CDevice_ud
 function i2c:get_device(bus, address, clock, smbus) end
 
 -- EFI state structure
@@ -346,6 +391,10 @@ efi = {}
 -- desc
 ---@return EFI_State_ud
 function efi:get_state() end
+
+-- get last update time in milliseconds
+---@return uint32_t_ud
+function efi:get_last_update_ms() end
 
 -- desc
 ---@param instance integer
@@ -662,38 +711,39 @@ function mavlink_mission_item_int_t_ud:param1() end
 function mavlink_mission_item_int_t_ud:param1(value) end
 
 
--- desc
+-- Parameter access helper.
 ---@class (exact) Parameter_ud
 local Parameter_ud = {}
 
+-- Create a new parameter helper, init must be called with a parameter name.
 ---@return Parameter_ud
----@param name? string
-function Parameter(name) end
+function Parameter() end
 
--- desc
+-- Set the defualt value of this parameter, if the parameter has not been configured by the user its value will be updated to the new defualt.
 ---@param value number
 ---@return boolean
 function Parameter_ud:set_default(value) end
 
--- desc
+-- Return true if the parameter has been configured by the user.
 ---@return boolean
 function Parameter_ud:configured() end
 
--- desc
+-- Set the parameter to the given value and save. The value will be persistant after a reboot.
 ---@param value number
 ---@return boolean
 function Parameter_ud:set_and_save(value) end
 
--- desc
+-- Set the parameter to the given value. The value will not persist a reboot.
 ---@param value number
 ---@return boolean
 function Parameter_ud:set(value) end
 
--- desc
+-- Get the current value of a parameter.
+-- Returns nil if the init has not been called and a valid parameter found.
 ---@return number|nil
 function Parameter_ud:get() end
 
--- desc
+-- Init the paramter from a key. This allows the script to load old parameter that have been removed from the main code.
 ---@param key integer
 ---@param group_element uint32_t_ud|integer|number
 ---@param type integer
@@ -704,11 +754,43 @@ function Parameter_ud:get() end
 ---@return boolean
 function Parameter_ud:init_by_info(key, group_element, type) end
 
--- desc
+-- Init this parameter from a name.
 ---@param name string
 ---@return boolean
 function Parameter_ud:init(name) end
 
+-- Parameter access helper
+---@class (exact) Parameter_ud_const
+local Parameter_ud_const = {}
+
+-- Create a new parameter helper with a parameter name.
+-- This will error if no parameter with the given name is found.
+---@return Parameter_ud_const
+---@param name string
+function Parameter(name) end
+
+-- Set the defualt value of this parameter, if the parameter has not been configured by the user its value will be updated to the new defualt.
+---@param value number
+---@return boolean
+function Parameter_ud_const:set_default(value) end
+
+-- Retrun true if the parameter has been configured by the user.
+---@return boolean
+function Parameter_ud_const:configured() end
+
+-- Set the parameter to the given value and save. The value will be persistant after a reboot.
+---@param value number
+---@return boolean
+function Parameter_ud_const:set_and_save(value) end
+
+-- Set the parameter to the given value. The value will not persist a reboot.
+---@param value number
+---@return boolean
+function Parameter_ud_const:set(value) end
+
+-- Get the current value of a parameter.
+---@return number
+function Parameter_ud_const:get() end
 
 -- Vector2f is a userdata object that holds a 2D vector with x and y components. The components are stored as floating point numbers.
 -- To create a new Vector2f you can call Vector2f() to allocate a new one, or call a method that returns one to you.
@@ -1133,6 +1215,13 @@ local AP_HAL__I2CDevice_ud = {}
 ---@param address integer
 function AP_HAL__I2CDevice_ud:set_address(address) end
 
+-- Performs an I2C transfer, sending data_str bytes (see string.pack) and
+-- returning a string of any requested read bytes (see string.unpack)
+---@param data_str string
+---@param read_length integer
+---@return string|nil
+function AP_HAL__I2CDevice_ud:transfer(data_str, read_length) end
+
 -- If no read length is provided a single register will be read and returned.
 -- If read length is provided a table of register values are returned.
 ---@param register_num integer
@@ -1151,41 +1240,46 @@ function AP_HAL__I2CDevice_ud:write_register(register_num, value) end
 function AP_HAL__I2CDevice_ud:set_retries(retries) end
 
 
--- Serial driver object
----@class (exact) AP_HAL__UARTDriver_ud
-local AP_HAL__UARTDriver_ud = {}
+-- Serial port access object
+---@class (exact) AP_Scripting_SerialAccess_ud
+local AP_Scripting_SerialAccess_ud = {}
 
--- Set flow control option for serial port
----@param flow_control_setting integer
----| '0' # disabled
----| '1' # enabled
----| '2' # auto
-function AP_HAL__UARTDriver_ud:set_flow_control(flow_control_setting) end
-
--- Returns number of available bytes to read.
----@return uint32_t_ud
-function AP_HAL__UARTDriver_ud:available() end
+-- Start serial port with the given baud rate (no effect for device ports)
+---@param baud_rate uint32_t_ud|integer|number
+function AP_Scripting_SerialAccess_ud:begin(baud_rate) end
 
 -- Writes a single byte
 ---@param value integer -- byte to write
 ---@return uint32_t_ud -- 1 if success else 0
-function AP_HAL__UARTDriver_ud:write(value) end
+function AP_Scripting_SerialAccess_ud:write(value) end
 
--- Read a single byte from the serial port
----@return integer -- byte, -1 if not available
-function AP_HAL__UARTDriver_ud:read() end
+-- Writes a string. The number of bytes actually written, i.e. the length of the
+-- written prefix of the string, is returned. It may be 0 up to the length of
+-- the string.
+---@param data string -- string of bytes to write
+---@return integer -- number of bytes actually written, which may be 0
+function AP_Scripting_SerialAccess_ud:writestring(data) end
 
--- Start serial port with given baud rate
----@param baud_rate uint32_t_ud|integer|number
-function AP_HAL__UARTDriver_ud:begin(baud_rate) end
+-- Reads a single byte from the serial port
+---@return integer -- byte, -1 if error or none available
+function AP_Scripting_SerialAccess_ud:read() end
 
---[[
-  read count bytes from a uart and return as a lua string. Note
-  that the returned string can be shorter than the requested length
---]]
----@param count integer
----@return string|nil
-function AP_HAL__UARTDriver_ud:readstring(count) end
+-- Reads up to `count` bytes and returns the bytes read as a string. No bytes
+-- may be read, in which case a 0-length string is returned.
+---@param count integer -- maximum number of bytes to read
+---@return string|nil -- bytes actually read, which may be 0-length, or nil on error
+function AP_Scripting_SerialAccess_ud:readstring(count) end
+
+-- Returns number of available bytes to read.
+---@return uint32_t_ud
+function AP_Scripting_SerialAccess_ud:available() end
+
+-- Set flow control option for serial port (no effect for device ports)
+---@param flow_control_setting integer
+---| '0' # disabled
+---| '1' # enabled
+---| '2' # auto
+function AP_Scripting_SerialAccess_ud:set_flow_control(flow_control_setting) end
 
 
 -- desc
@@ -1571,6 +1665,10 @@ function Motors_dynamic:init(expected_num_motors) end
 
 -- desc
 analog = {}
+
+-- return MCU temperature in degrees C
+---@return number -- MCU temperature
+function analog:mcu_temperature() end
 
 -- desc
 ---@return AP_HAL__AnalogSource_ud|nil
@@ -1979,6 +2077,11 @@ function esc_telem:update_rpm(esc_index, rpm, error_rate) end
 ---@param scale_factor number -- factor
 function esc_telem:set_rpm_scale(esc_index, scale_factor) end
 
+-- get the timestamp of last telemetry data for an ESC
+---@param esc_index integer
+---@return uint32_t_ud
+function esc_telem:get_last_telem_data_ms(esc_index) end
+
 -- desc
 optical_flow = {}
 
@@ -2020,16 +2123,32 @@ function baro:get_altitude() end
 ---@return boolean
 function baro:healthy(instance) end
 
+-- get altitude difference from a base pressure and current pressure
+---@param base_pressure number -- first reference pressure in Pa
+---@param pressure number -- 2nd pressure in Pa
+---@return number -- altitude difference in meters
+function baro:get_altitude_difference(base_pressure,pressure) end
 
 -- Serial ports
 serial = {}
 
--- Returns the UART instance that allows connections from scripts (those with SERIALx_PROTOCOL = 28`).
--- For instance = 0, returns first such UART, second for instance = 1, and so on.
--- If such an instance is not found, returns nil.
----@param instance integer -- the 0-based index of the UART instance to return.
----@return AP_HAL__UARTDriver_ud|nil -- the requested UART instance available for scripting, or nil if none.
+-- Returns a serial access object that allows a script to interface with a
+-- device over a port set to protocol 28 (Scripting) (e.g. SERIALx_PROTOCOL).
+-- Instance 0 is the first such port, instance 1 the second, and so on. If the
+-- requested instance is not found, returns nil.
+---@param instance integer -- 0-based index of the Scripting port to access
+---@return AP_Scripting_SerialAccess_ud|nil -- access object for that instance, or nil if not found
 function serial:find_serial(instance) end
+
+-- Returns a serial access object that allows a script to simulate a device
+-- attached via a specific protocol. The device protocol is configured by
+-- SCR_SDEVx_PROTO. Instance 0 is the first such protocol, instance 1 the
+-- second, and so on. If the requested instance is not found, or SCR_SDEV_EN is
+-- disabled, returns nil.
+---@param protocol integer -- protocol to access
+---@param instance integer -- 0-based index of the protocol instance to access
+---@return AP_Scripting_SerialAccess_ud|nil -- access object for that instance, or nil if not found
+function serial:find_simulated_device(protocol, instance) end
 
 
 -- desc
@@ -2387,6 +2506,12 @@ function vehicle:is_taking_off() end
 ---@return boolean
 function vehicle:is_landing() end
 
+-- Set the previous target location for crosstrack and crosstrack if available in the current mode
+-- It's up to the Lua code to ensure the new_start_location makes sense
+---@param new_start_location Location_ud
+---@return boolean -- true on success
+function vehicle:set_crosstrack_start(new_start_location) end
+
 -- desc
 onvif = {}
 
@@ -2506,6 +2631,12 @@ function gcs:send_text(severity, text) end
 -- Return the system time when a gcs with id of SYSID_MYGCS was last seen
 ---@return uint32_t_ud -- system time in milliseconds
 function gcs:last_seen() end
+
+-- call a MAVLink MAV_CMD_xxx command via command_int interface
+---@param command integer -- MAV_CMD_xxx
+---@param params table -- parameters of p1, p2, p3, p4, x, y and z and frame. Any not specified taken as zero
+---@return integer -- MAV_RESULT
+function gcs:run_command_int(command, params) end
 
 -- The relay library provides access to controlling relay outputs.
 relay = {}
@@ -2819,6 +2950,18 @@ gps.GPS_OK_FIX_2D = enum_integer
 gps.NO_FIX = enum_integer
 gps.NO_GPS = enum_integer
 
+-- get unix time
+---@param instance integer -- instance number
+---@return uint64_t_ud -- unix time microseconds
+function gps:time_epoch_usec(instance) end
+
+-- get yaw from GPS in degrees
+---@param instance integer -- instance number
+---@return number|nil -- yaw in degrees
+---@return number|nil -- yaw accuracy in degrees
+---@return uint32_t_ud|nil -- time in milliseconds of last yaw reading
+function gps:gps_yaw_deg(instance) end
+
 --  Returns nil or the instance number of the first GPS that has not been fully configured. If all GPS’s have been configured this returns nil.
 ---@return integer|nil
 function gps:first_unconfigured_gps() end
@@ -3031,6 +3174,11 @@ function battery:current_amps(instance) end
 ---@return number -- resting voltage
 function battery:voltage_resting_estimate(instance) end
 
+-- Returns the estimated internal battery resistance in Ohms
+---@param instance integer -- battery instance
+---@return number -- estimated internal resistance in Ohms
+function battery:get_resistance(instance) end
+
 -- Returns the voltage of the selected battery instance.
 ---@param instance integer -- battery instance
 ---@return number -- voltage
@@ -3071,6 +3219,10 @@ function arming:get_aux_auth_id() end
 -- Attempts to arm the vehicle. Returns true if successful.
 ---@return boolean -- true if armed successfully
 function arming:arm() end
+
+-- force arm the vehicle
+---@return boolean -- true if armed
+function arming:arm_force() end
 
 -- Returns a true if vehicle is currently armed.
 ---@return boolean -- true if armed
