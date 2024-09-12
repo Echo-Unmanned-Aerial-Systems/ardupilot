@@ -40,17 +40,17 @@ sudo apt install binutils-arm-none-eabi
 ## Build steps: ##
 
 1. Open a new terminal: VSCode > Terminal > New Terminal
-2. Navigate to the ardupilot directory:  use ```cd ~/ardupilot```  
+1. Navigate to the ardupilot directory:  use ```cd ~/ardupilot```  
     (note: tilda is a linux shortcut to the home folder)
-2. Configure the bootloader ```./waf configure --board EchoUAS-BM --bootloader```  
+1. Configure the bootloader ```./waf configure --board EchoUAS-BM --bootloader```  
     if it complains about pexpect install it with ```pip install pexpect```
 
-3. Build the bootloader: ``` ./waf bootloader ```  
+1. Build the bootloader: ``` ./waf bootloader ```  
 It might ask you to install *empy*. If so run: ```python3 -m pip install empy==3.3.4 ```  
 Then repeat step 2  
 There should be a bunch of new files in the ardupilot/build/EchoUAS-BM directory
 
-4. Configure the board ```./waf configure --board EchoUAS-BM```  
+1. Configure the board ```./waf configure --board EchoUAS-BM```  
 If you get the following error:
     ```
     Error: Bootloader (./Tools/bootloaders/EchoUAS-BM_bl.bin) does not exist and AP_BOOTLOADER_FLASHING_ENABLED   
@@ -59,12 +59,33 @@ If you get the following error:
     if means you need to run the suggested .py script with python3 from the root directory  
 eg:  ```ardupilot> python3 Tools/scripts/build_bootloaders.py EchoUAS-BM```  
 
-5. Build using: ``` ./waf AP_Periph ```  
+1. Build using: ``` ./waf AP_Periph ```  
   If you get the error: ```ModuleNotFoundError: No module named 'serial'``` you need to install a pyserial module ```pip3 install pyserial```  
   If you get an error regarding _pexpect_ , try ```pip install pexpect```  
-  then build again.
+  then build again.  
+  Note: you can find the AP_Periph.bin file and the AP_bootloader.bin files at [ardupilot/build/EchoUAS-BM/bin](build/EchoUAS-BM/bin) 
 
-6. Find the AP_Periph.bin file at [ardupilot/build/EchoUAS-BM/bin](build/EchoUAS-BM/bin)
+1. If you are programming a new chip, it will not have a bootloader. This is required for Mission Planner to find the device.  
+  To do this you will need:
+    - a ST-Link device connected via USB, with you board connected to SWCLK and SWDIO.  
+    - app called *STM32CubeProgrammer*.  
+  
+    From the *STM32CubeProgrammer* app:  
+    - select the second tab: Erasing and Programming.  
+    - hit CONNECT on the far right
+    - incase there is some other program on the device, find the Erase flash memory tab, hit **Full chip erase**
+    - in the *Download* section, under *File Path*, navigate to your AP_Bootloader.bin file and hit **Start Programming**
+    - it should give you a success popup.
+
+1. Once the bootloader is on, you can upload the main firmware using Mission Planner.  
+    ```
+    Setup >  
+      DroneCAN/UAVCAN
+        click button: MAVlink-CAN1
+    ```
+    You should see a list of connected can devices. Choose menu > upload.  
+    It will ask if you want to search the internet for an update. Choose **no** and then select your local .bin file.  
+    
 
 
 
