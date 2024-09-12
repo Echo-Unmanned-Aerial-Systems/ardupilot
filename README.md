@@ -1,11 +1,16 @@
 [comment]: # (to view this file in pretty format in VS Code, right click Open Preview)
 
 # EchoUAS Notes #
+### Overview ###
+The build process uses hwdef.dat files to control what gets built.  
+These files can be found in the following **directories**:
 
-### Directories ###
 - Battery Monitor folder: [libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/)
-- CANNode_L431 folder: [libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/)
-- Read the [Build Istructions](BUILD.md) 
+- Include files (pinouts etc) for our devices that use L431: [libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-L431/)  
+  (these are included in the first line of hwdef.dat)
+
+More details can be found here [Build Instructions](BUILD.md)  
+There is a new file created for EchoUAS Battery monitor. See the [programming notes](libraries/AP_HAL_ChibiOS/hwdef/EchoUAS-BM/README.md) 
 
 ### WSL Extension ###
 Install WSL on Windows and then install the WSL Extension in VS Code before you clone anything.  
@@ -56,8 +61,11 @@ If you get the following error:
     Error: Bootloader (./Tools/bootloaders/EchoUAS-BM_bl.bin) does not exist and AP_BOOTLOADER_FLASHING_ENABLED   
     Please run: Tools/scripts/build_bootloaders.py EchoUAS-BM 
     ```
-    if means you need to run the suggested .py script with python3 from the root directory  
+    it means you need to run the suggested .py script with python3 from the root directory  
 eg:  ```ardupilot> python3 Tools/scripts/build_bootloaders.py EchoUAS-BM```  
+
+    *Note: What this configure step does:*  
+    - *copies the defines in the hwdef.dat to a header file in the build directory: [build/MatekL431-BattMon/hwdef.h](build/MatekL431-BattMon/hwdef.h)*  
 
 1. Build using: ``` ./waf AP_Periph ```  
   If you get the error: ```ModuleNotFoundError: No module named 'serial'``` you need to install a pyserial module ```pip3 install pyserial```  
