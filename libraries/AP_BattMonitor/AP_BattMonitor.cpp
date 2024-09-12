@@ -21,6 +21,7 @@
 #include "AP_BattMonitor_EFI.h"
 #include "AP_BattMonitor_INA2xx.h"
 #include "AP_BattMonitor_INA239.h"
+#include "AP_BattMonitor_EchoUAS.h"
 #include "AP_BattMonitor_LTC2946.h"
 #include "AP_BattMonitor_Torqeedo.h"
 #include "AP_BattMonitor_FuelLevel_Analog.h"
@@ -585,6 +586,11 @@ AP_BattMonitor::init()
                 break;
 #endif
 #if AP_BATTERY_INA239_ENABLED
+            case Type::INA239_SPI:
+                drivers[instance] = NEW_NOTHROW AP_BattMonitor_INA239(*this, state[instance], _params[instance]);
+                break;
+#endif
+#if AP_BATTERY_ECHOUAS_ENABLED
             case Type::INA239_SPI:
                 drivers[instance] = NEW_NOTHROW AP_BattMonitor_INA239(*this, state[instance], _params[instance]);
                 break;
