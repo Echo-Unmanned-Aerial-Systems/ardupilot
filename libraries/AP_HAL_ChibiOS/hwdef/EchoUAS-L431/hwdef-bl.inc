@@ -20,8 +20,8 @@ FLASH_SIZE_KB 256
 APP_START_OFFSET_KB 4
 
 # ---------------------------------------------
-# PB3 LED_BOOTLOADER OUTPUT LOW  # blue
-# define HAL_LED_ON 0
+PB3 LED_BOOTLOADER OUTPUT LOW  # blue
+define HAL_LED_ON 0
 
 # enable CAN support
 PB8 CAN1_RX CAN1
@@ -50,8 +50,8 @@ MAIN_STACK 0x800
 PROCESS_STACK 0x800
 
 # Add CS pins to ensure they are high in bootloader
-PA4 SPARE_CS CS
-# PB12 SPI2_CS CS
+PA4 MAG_CS CS
+PB2 SPARE_CS CS
 
 # debugger support
 PA13 JTMS-SWDIO SWD
